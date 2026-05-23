@@ -1,14 +1,22 @@
 from datetime import datetime
 from uuid import UUID, uuid4
-from fastapi import FastAPI, HTTPException, Query, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
-from services.products import add_product, change_product, get_all_products, remove_product
+from services.products import add_product, change_product, get_all_products, remove_product, load_products
 from schema.product import Product, ProductUpdate
 
 app = FastAPI()
 
+@app.middleware("http")
+async def lifecycle(request: Request, call_next):
+    print('before request')
+    response = await call_next(request)
+    print('after request')
+    return response
+
 @app.get("/products")
 def list_products(
+    dep=Depends(load_products),
     name: str = Query(
         default=None, min_length=1, max_length=50, description="Search product by name"
     ),
@@ -23,7 +31,8 @@ def list_products(
         default=0, ge=0, description="Pagination offset"
     )
 ):
-    products = get_all_products()
+    # products = get_all_products()
+    products = dep
     total_products = len(products)
     
     if name:
