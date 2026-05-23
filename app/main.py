@@ -1,14 +1,11 @@
+from datetime import datetime
+from uuid import UUID, uuid4
 from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.responses import JSONResponse
-from services.product import get_all_products
+from services.products import add_product, change_product, get_all_products, remove_product
+from schema.product import Product, ProductUpdate
 
 app = FastAPI()
-
-
-@app.get("/")
-def root():
-    return JSONResponse({"message": "Server connection successfull"})
-
 
 @app.get("/products")
 def list_products(
@@ -43,4 +40,43 @@ def list_products(
     if not products:
         raise HTTPException(status_code=404, detail="No product found")
 
-    return JSONResponse({"total": total_products, "limit": limit, "products": products})
+    return JSONResponse({"total": total_products, "limit": limit, "products": products}, status_code=status.HTTP_200_OK)
+
+@app.get('/products/{product_id}')
+def get_product_by_id(product_id: str):
+    products = get_all_products()
+    
+    for product in products:
+        if product.get("id") == product_id:
+            return JSONResponse(product)
+    else:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Product not found')
+
+@app.post('/products', status_code=status.HTTP_201_CREATED)
+def create_product(product: Product):
+    product_dict = product.model_dump(mode='json')
+    product_dict['id'] = str(uuid4())
+    product_dict['created_at'] = datetime.now().isoformat() + 'Z'
+
+    try:
+        add_product(product_dict)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return product.model_dump(mode='json')
+
+@app.delete('/products/{product_id}')
+def delete_product(product_id: UUID):
+    try:
+        res = remove_product(str(product_id))
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@app.put("/products/{product_id}")
+def update_product(product_id: UUID, payload: ProductUpdate):
+    try:
+        update_product = change_product(str(product_id), payload.model_dump(mode='json', exclude_unset=True))
+
+        return update_product
+    except Exception as e:
+        return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
